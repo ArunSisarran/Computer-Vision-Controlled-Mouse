@@ -2,6 +2,8 @@ import cv2
 import mediapipe as mp
 import pickle
 import numpy as np
+import createDataset
+
 
 model_dict = pickle.load(open('./model.p', 'rb'))
 model = model_dict['model']
@@ -11,6 +13,7 @@ mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 
+# static image to false here to increase the fluidity of tracking
 hands = mp_hands.Hands(static_image_mode=False, min_detection_confidence=0.65)
 labels_dict = {0: 'Cursor', 1: 'Drawing', 2: 'Select'}
 
@@ -53,7 +56,8 @@ while True:
         prev_landmarks = current_landmarks.copy()
 
         if len(data_aux) == 42:
-            prediction = model.predict([np.asarray(data_aux)])
+            normalized_data = createDataset.normalize_hand_landmarks(data_aux)
+            prediction = model.predict([np.asarray(normalized_data)])
             predicted_character = labels_dict[int(prediction[0])]
             print(predicted_character)
 
@@ -62,3 +66,4 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+

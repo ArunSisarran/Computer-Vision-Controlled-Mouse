@@ -2,6 +2,8 @@ import cv2
 import mediapipe as mp
 import pickle
 import numpy as np
+import createDataset
+
 
 model_dict = pickle.load(open('./model.p', 'rb'))
 model = model_dict['model']
@@ -11,14 +13,16 @@ mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 
-hands = mp_hands.Hands(static_image_mode=True, min_detection_confidence=0.65)
-labels_dict = {0: 'Drawing', 1: 'Cursor'}
+# static image to false here to increase the fluidity of tracking
+hands = mp_hands.Hands(static_image_mode=False, min_detection_confidence=0.65)
+labels_dict = {0: 'Cursor', 1: 'Drawing', 2: 'Select'}
+
+prev_landmarks = None
+smoothing_factor = 0.5
 
 while True:
-
     data_aux = []
     ret, frame, = cap.read()
-
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     results = hands.process(frame_rgb)
@@ -33,14 +37,27 @@ while True:
             )
 
         hand_landmarks = results.multi_hand_landmarks[0]
+        current_landmarks = []
+
         for i in range(len(hand_landmarks.landmark)):
             x = hand_landmarks.landmark[i].x
             y = hand_landmarks.landmark[i].y
-            data_aux.append(x)
-            data_aux.append(y)
+            current_landmarks.extend([x, y])
+
+        if prev_landmarks is not None and len(prev_landmarks) == len(current_landmarks):
+            smoothed_landmarks = []
+            for i in range(len(current_landmarks)):
+                smoothed = prev_landmarks[i] * smoothing_factor + current_landmarks[i] * (1 - smoothing_factor)
+                smoothed_landmarks.append(smoothed)
+            data_aux = smoothed_landmarks
+        else:
+            data_aux = current_landmarks
+
+        prev_landmarks = current_landmarks.copy()
 
         if len(data_aux) == 42:
-            prediction = model.predict([np.asarray(data_aux)])
+            normalized_data = createDataset.normalize_hand_landmarks(data_aux)
+            prediction = model.predict([np.asarray(normalized_data)])
             predicted_character = labels_dict[int(prediction[0])]
             print(predicted_character)
 
@@ -49,3 +66,4 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+

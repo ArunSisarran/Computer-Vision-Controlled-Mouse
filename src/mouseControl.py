@@ -1,14 +1,16 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-import pyautogui
+from pynput.mouse import Button, Controller
 import time
 
 
 def index_finger_control():
 
-    # Setting up mediapipe
+    # Initialize mouse controller
+    mouse = Controller()
 
+    # Setting up mediapipe
     mp_hands = mp.solutions.hands
     mp_drawing = mp.solutions.drawing_utils
     hands = mp_hands.Hands(static_image_mode=False,
@@ -16,8 +18,9 @@ def index_finger_control():
                            min_detection_confidence=0.7,
                            min_tracking_confidence=0.7)
 
-    # Screen dimensions
-    screen_width, screen_height = pyautogui.size()
+    # Get screen dimensions - hardcoded since we can't use pyautogui.size()
+    # You may need to adjust these values for your screen
+    screen_width, screen_height = 1920, 1080  
 
     # Start camera
     camera = cv2.VideoCapture(0)
@@ -62,16 +65,31 @@ def index_finger_control():
                 cursor_x = int(index_finger.x * frame_width)
                 cursor_y = int(index_finger.y * frame_height)
 
-                # Gettign the thumb postion for selecting
+                # Getting the thumb position for selecting
                 thumb_finger = hand_landmarks.landmark[thumb]
-                thumb_x = int(thumb_finger * frame_width)
-                thumb_y = int(thumb_finger * frame_height)
+                thumb_x = int(thumb_finger.x * frame_width)
+                thumb_y = int(thumb_finger.y * frame_height)
 
                 # Distance between the index and the thumb
                 distance = np.sqrt((cursor_x - thumb_x) ** 2 + (cursor_y - thumb_y) ** 2)
 
                 # Draws a circle on the index finger
                 cv2.circle(frame, (cursor_x, cursor_y), 10, (0, 255, 0), -1)
+
+                # Apply smoothing to cursor movement
+                if previous_x > 0 and previous_y > 0:
+                    cursor_x = int(previous_x * smoothing_factor + cursor_x * (1 - smoothing_factor))
+                    cursor_y = int(previous_y * smoothing_factor + cursor_y * (1 - smoothing_factor))
+                
+                # Update previous positions
+                previous_x, previous_y = cursor_x, cursor_y
+                
+                # Map index finger position to screen coordinates
+                mouse_x = int(cursor_x * screen_width / frame_width)
+                mouse_y = int(cursor_y * screen_height / frame_height)
+                
+                # Move mouse cursor
+                mouse.position = (mouse_x, mouse_y)
 
                 # Detection if you are pinching your thumb and index so it goes into selection mode
                 if distance < 40:
@@ -83,9 +101,10 @@ def index_finger_control():
                     bar_width = int(100 * progress)
                     cv2.rectangle(frame, (10, 70), (10 + bar_width, 85), (0, 0, 255), -1)
 
-                    # If you reach that threshhold click
+                    # If you reach that threshold click
                     if selection_timer >= selection_threshold and not selection_mode:
-                        pyautogui.click()
+                        mouse.press(Button.left)
+                        mouse.release(Button.left)
                         selection_mode = True
 
                 else:
@@ -108,6 +127,4 @@ def index_finger_control():
 
 if __name__ == "__main__":
     time.sleep(1)
-    pyautogui.PAUSE = 0.1
-    pyautogui.FAILSAFE = True
     index_finger_control()
